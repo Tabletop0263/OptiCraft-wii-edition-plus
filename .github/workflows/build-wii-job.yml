@@ -1,0 +1,140 @@
+# ─────────────────────────────────────────────────────────────────────
+# 1) In the `on:` block, replace the bare `workflow_dispatch:` line with:
+# ─────────────────────────────────────────────────────────────────────
+#   workflow_dispatch:
+#     inputs:
+#       jar_url:
+#         description: "Direct URL to YOUR OWN Minecraft 1.2.5 client jar (Wii game data)"
+#         required: false
+#         type: string
+#
+# ─────────────────────────────────────────────────────────────────────
+# 2) Replace the whole `build-wii:` job with this (same indentation as
+#    the other jobs, i.e. two spaces under `jobs:`):
+# ─────────────────────────────────────────────────────────────────────
+
+  # ── Nintendo Wii ──────────────────────────────────────────────────────
+  build-wii:
+    timeout-minutes: 45
+    name: Nintendo Wii
+    runs-on: ubuntu-26.04
+    container:
+      image: devkitpro/devkitppc:20260503
+    steps:
+      - name: Install build dependencies
+        run: apt update && apt install -y git cmake ninja-build ccache python3 unzip curl ca-certificates
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Mark workspace safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache ccache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ccache
+          key: ccache-wii-${{ github.run_id }}
+          restore-keys: |
+            ccache-wii-
+
+      - name: Configure ccache
+        run: ccache --max-size=2G && ccache --set-config=compression=true
+
+      - name: Configure
+        run: >
+          cmake -B build/wii-release -G Ninja
+          -DCMAKE_TOOLCHAIN_FILE=cmake/wii_toolchain.cmake
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_MAKE_PROGRAM=ninja
+          -DPLATFORM=WII
+          -DWII_BRINGUP=OFF
+          -DWII_ENABLE_SOUND=ON
+          -DWII_ENABLE_NETWORK=ON
+          -DCMAKE_CXX_FLAGS="-DHW_RVL -mrvl -mcpu=750 -meabi -mhard-float -I$GITHUB_WORKSPACE/src/net/minecraft/src"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build/wii-release --parallel
+
+      # The game data is NOT in the repo (it is the contents of the
+      # Minecraft 1.2.5 client jar). Layout below is the one the project's
+      # own docs use: data/assets (jar contents) + data/resources
+      # (sound/ and newsound/ moved out of the jar contents).
+      - name: Prepare game data from your 1.2.5 jar
+        id: data
+        env:
+          JAR_URL: ${{ inputs.jar_url || secrets.MC_JAR_URL }}
+        run: |
+          set -eu
+          rm -f /tmp/mc.jar
+          if [ -n "${JAR_URL:-}" ]; then
+            curl -fSL "$JAR_URL" -o /tmp/mc.jar
+          elif [ -f private-data/1.2.5.jar ]; then
+            cp private-data/1.2.5.jar /tmp/mc.jar
+          else
+            echo "::warning::No jar_url input, MC_JAR_URL secret or private-data/1.2.5.jar. Package will contain boot.dol only and the Wii will say 'Assets couldn't be loaded'."
+            echo "have_data=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir -p /tmp/jar data/assets data/resources
+          unzip -q /tmp/mc.jar -d /tmp/jar
+          cp -r /tmp/jar/. data/assets/
+          for d in newsound sound; do
+            if [ -d "data/assets/$d" ]; then mv "data/assets/$d" data/resources/; fi
+          done
+          rm -rf /tmp/mc.jar /tmp/jar
+          echo "have_data=true" >> "$GITHUB_OUTPUT"
+
+      # The repo keeps asset staging as a separate CMake target. I could not
+      # read cmake/wii.cmake, so the target name is discovered, not assumed.
+      - name: Stage runtime data into bin/wii/sd
+        if: steps.data.outputs.have_data == 'true'
+        run: |
+          set -eu
+          targets=$(cd build/wii-release && ninja -t targets all \
+            | grep -E '^[A-Za-z0-9_-]+: phony$' | cut -d: -f1 \
+            | grep -iE 'data|asset|stage|deploy|pak' || true)
+          echo "Candidate staging targets: ${targets:-<none>}"
+          for t in $targets; do
+            echo "::group::cmake --build --target $t"
+            cmake --build build/wii-release --target "$t"
+            echo "::endgroup::"
+          done
+
+      - name: Verify SD package
+        run: |
+          set -eu
+          D=bin/wii/sd/apps/OptiCraft
+          test -f "$D/boot.dol" || { echo "::error::boot.dol missing in $D"; exit 1; }
+          others=$(find "$D" -type f ! -name boot.dol | wc -l)
+          echo "Files besides boot.dol: $others"
+          find bin/wii/sd -maxdepth 4 | sort | head -100
+          du -sh bin/wii/sd
+          if [ "${{ steps.data.outputs.have_data }}" = "true" ] && [ "$others" -eq 0 ]; then
+            echo "::error::Game data was prepared but no staging target put files in $D. Check the 'Stage runtime data' log for the target list."
+            exit 1
+          fi
+
+      # Uploaded as a directory: the artifact zip's root IS the SD card root
+      # (apps/OptiCraft/...). Extract it straight onto the card.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opticraft-wii-sdcard
+          path: bin/wii/sd/
+          if-no-files-found: error
+          retention-days: 3
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opticraft-wii-elf
+          path: bin/wii/OptiCraft.elf
+          if-no-files-found: warn
+
+      - name: ccache stats
+        if: always()
+        run: ccache --show-stats

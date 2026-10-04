@@ -168,6 +168,8 @@ jobs:
             cp -r wii-data/. dist/sd/apps/OptiCraft/data/
           fi
           cp bin/wii/OptiCraft.elf OptiCraft-wii.elf
+          echo "packaged files: $(find dist/sd -type f | wc -l)"
+          find dist/sd -maxdepth 6 -type d | head -40
 
       - uses: actions/upload-artifact@v7
         with:

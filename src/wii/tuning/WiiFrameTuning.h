@@ -45,7 +45,7 @@
 // 2 on NTSC/PAL60, 2 on PAL50 (25 fps). The count runs from the previous
 // present, so a frame that misses the first retrace presents on the second
 // instead of being held for a third.
-#define WII_TARGET_FPS                           30
+#define WII_TARGET_FPS                           0
 
 // 5 ms of a 33 ms frame is the mesh governor; the count is the backstop for
 // when the clock misbehaves. Sized for WII_TARGET_FPS 30 -- at 60 these were
@@ -55,7 +55,7 @@
 // says there is headroom, raise CHUNK_BUILD_BUDGET_MS first and watch how
 // fast terrain fills in behind you.
 #undef  PLATFORM_MAX_RENDERER_UPDATES_PER_FRAME
-#define PLATFORM_MAX_RENDERER_UPDATES_PER_FRAME  8
+#define PLATFORM_MAX_RENDERER_UPDATES_PER_FRAME  6
 // Edit-latency lane; see PS2_URGENT_MESH_DISTANCE_SQ. The Wii has no staging
 // pool, so the lease reserve stays 0.
 #undef  PLATFORM_URGENT_MESH_DISTANCE_SQ
@@ -67,7 +67,7 @@
 #undef  PLATFORM_URGENT_MESH_BUDGET_MS
 #define PLATFORM_URGENT_MESH_BUDGET_MS           10
 #undef  PLATFORM_CHUNK_BUILD_BUDGET_MS
-#define PLATFORM_CHUNK_BUILD_BUDGET_MS           5
+#define PLATFORM_CHUNK_BUILD_BUDGET_MS           3
 
 // Incremental terrain meshing. A Wii section no longer compiles all 4096 blocks
 // in one updateRenderer() call. The block count is the deterministic fallback;

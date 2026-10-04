@@ -2022,12 +2022,13 @@ void Minecraft::runTick()
             }
             if (eventKey == lwjgl::Keyboard::KEY_F1)
                 gameSettings->hideGUI = !gameSettings->hideGUI;
+            // F3 debug mode / debug options screen disabled: the FPS counter is
+            // always on (GameSettings::showFps defaults true) and the extended
+            // overlay is never shown.
             if (eventKey == lwjgl::Keyboard::KEY_F3)
             {
-                if (gameSettings->legacyUI)
-                    displayGuiScreen(new LegacyDebugOptions(nullptr, gameSettings));
-                else
-                    gameSettings->showDebugInfo = !gameSettings->showDebugInfo;
+                gameSettings->showDebugInfo = false;
+                gameSettings->showFps = true;
             }
             if (eventKey == lwjgl::Keyboard::KEY_F5)
             {

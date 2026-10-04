@@ -132,7 +132,7 @@ void GameSettings::setDefaults()
     hideGUI = false;
     thirdPersonView = 0;
     showDebugInfo = false;
-    showFps = false;
+    showFps = true;
     debugKeepInventory = false;
     lastServer = "";
     language = "en_US";

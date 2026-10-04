@@ -641,6 +641,15 @@ namespace
         };
 #endif
 
+        // Visible groups that sit back to back in the buffer go out as ONE
+        // GX_CallDispList. Every group is recorded 32-byte aligned and padded
+        // with NOPs, so a span covering neighbours is a valid list, and a
+        // section that is not culled at all costs one call instead of up to 7.
+        unsigned int runStart = 0u;
+        unsigned int runEnd = 0u;
+        bool runOpen = false;
+        unsigned char* const base = static_cast<unsigned char*>(list.data);
+
         for (int g = 0; g < list.groupCount; ++g)
         {
             if (list.groupSize[g] == 0u)
@@ -661,15 +670,33 @@ namespace
                 if (!visible)
                 {
                     ++s_faceGroupsCulled;
+                    if (runOpen)
+                    {
+                        GX_CallDispList(base + runStart, runEnd - runStart);
+                        runOpen = false;
+                    }
                     continue;
                 }
             }
 #endif
 
             ++s_faceGroupsDrawn;
-            GX_CallDispList(static_cast<unsigned char*>(list.data) + list.groupOffset[g],
-                            list.groupSize[g]);
+            if (runOpen && list.groupOffset[g] == runEnd)
+            {
+                runEnd = list.groupOffset[g] + list.groupSize[g];
+            }
+            else
+            {
+                if (runOpen)
+                    GX_CallDispList(base + runStart, runEnd - runStart);
+                runStart = list.groupOffset[g];
+                runEnd = runStart + list.groupSize[g];
+                runOpen = true;
+            }
         }
+
+        if (runOpen)
+            GX_CallDispList(base + runStart, runEnd - runStart);
     }
 
 
@@ -1366,13 +1393,23 @@ namespace
         // RenderList changes the logical modelview between groups. Start from
         // that live matrix, then reproduce the transform that the old OpenGX
         // display list recorded around each local chunk mesh.
-        wii_gx_get_native_modelview(modelview);
-        const float half = sectionSize * 0.5f;
-        const float scale = 1.000001f;
-        wiiMtxApplyTrans(modelview, modelview, x, y, z);
-        wiiMtxApplyTrans(modelview, modelview, -half, -half, -half);
-        wiiMtxApplyScale(modelview, modelview, scale, scale, scale);
-        wiiMtxApplyTrans(modelview, modelview, half, half, half);
+        // Equivalent to M * T(x,y,z) * T(-h) * S(k) * T(h) -- the four chained
+        // guMtxApply*() calls this used to make -- folded into one pass:
+        // linear part scaled by k, translation = M3 * (xyz + h*(k-1)) + Mt.
+        Mtx base;
+        wii_gx_get_native_modelview(base);
+        const float k = 1.000001f;
+        const float shift = sectionSize * 0.5f * (k - 1.0f);
+        const float tx = x + shift;
+        const float ty = y + shift;
+        const float tz = z + shift;
+        for (int r = 0; r < 3; ++r)
+        {
+            modelview[r][0] = base[r][0] * k;
+            modelview[r][1] = base[r][1] * k;
+            modelview[r][2] = base[r][2] * k;
+            modelview[r][3] = base[r][0] * tx + base[r][1] * ty + base[r][2] * tz + base[r][3];
+        }
     }
 
     static void loadChunkTransform(float x, float y, float z, float sectionSize)

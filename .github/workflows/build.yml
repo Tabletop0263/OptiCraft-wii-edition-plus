@@ -116,7 +116,7 @@ jobs:
       image: devkitpro/devkitppc:20260503
     steps:
       - name: Install build dependencies
-        run: apt update && apt install -y git cmake ninja-build ccache
+        run: apt update && apt install -y git cmake ninja-build ccache zip
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -157,17 +157,30 @@ jobs:
 
       - name: Package
         run: |
-          mkdir -p dist
-          cp bin/wii/OptiCraft.elf dist/OptiCraft-wii.elf
-          [ -f bin/wii/sd/apps/OptiCraft/boot.dol ] && \
-            cp bin/wii/sd/apps/OptiCraft/boot.dol dist/ || true
-          tar -C dist -czf OptiCraft-wii.tar.gz .
+          # SD-card-shaped tree: extract the zip onto the SD root and you get
+          # apps/OptiCraft/ with boot.dol, meta.xml and data/.
+          # Anything in wii-data/ (assets/, resources/ with sound/, music/, ...)
+          # is overlaid into apps/OptiCraft/data/.
+          mkdir -p dist/sd
+          cp -r bin/wii/sd/. dist/sd/
+          if [ -d wii-data ]; then
+            mkdir -p dist/sd/apps/OptiCraft/data
+            cp -r wii-data/. dist/sd/apps/OptiCraft/data/
+          fi
+          (cd dist/sd && zip -qr ../../OptiCraft-wii-sd.zip .)
+          cp bin/wii/OptiCraft.elf OptiCraft-wii.elf
 
       - uses: actions/upload-artifact@v7
         with:
-          name: opticraft-wii
-          path: OptiCraft-wii.tar.gz
+          name: opticraft-wii-sd
+          path: OptiCraft-wii-sd.zip
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opticraft-wii-elf
+          path: OptiCraft-wii.elf
+          if-no-files-found: warn
 
       - name: ccache stats
         if: always()

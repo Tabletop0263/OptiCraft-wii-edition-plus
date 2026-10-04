@@ -167,13 +167,12 @@ jobs:
             mkdir -p dist/sd/apps/OptiCraft/data
             cp -r wii-data/. dist/sd/apps/OptiCraft/data/
           fi
-          (cd dist/sd && zip -qr ../../OptiCraft-wii-sd.zip .)
           cp bin/wii/OptiCraft.elf OptiCraft-wii.elf
 
       - uses: actions/upload-artifact@v7
         with:
           name: opticraft-wii-sd
-          path: OptiCraft-wii-sd.zip
+          path: dist/sd/
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v7

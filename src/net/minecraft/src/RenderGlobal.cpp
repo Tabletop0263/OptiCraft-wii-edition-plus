@@ -2626,8 +2626,7 @@ bool RenderGlobal::updateRenderers(EntityLiving *entityliving, bool flag)
 		}
 		if (urgentChunkCount > 0)
 		{
-			printf("[PERF] Urgent meshing queue: %d chunks | Tiempo total remallado: %.2f ms | Vértices generados: %d\n",
-			       urgentChunkCount, (double)urgentSpentUs / 1000.0, urgentVerticesBuilt);
+			(void)urgentVerticesBuilt;
 		}
 	}
 

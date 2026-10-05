@@ -4391,7 +4391,8 @@ bool World::updatingLighting()
                     const int affectedSubsections = world->lightingDirtyRegions.getFlushedCount();
                     if (affectedSubsections > 0 || elapsedMs >= 0.1)
                     {
-                        printf("[PERF] Skylight floodfill time: %.2f ms (subsecciones afectadas: %d)\n", elapsedMs, affectedSubsections);
+                        (void)elapsedMs;
+                        (void)affectedSubsections;
                     }
                 }
             }

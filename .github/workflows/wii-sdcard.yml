@@ -100,6 +100,17 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Add wii-data (sounds etc.) to SD package
+        run: |
+          set -eu
+          if [ -d wii-data ]; then
+            mkdir -p bin/wii/sd/apps/OptiCraft/data
+            cp -r wii-data/. bin/wii/sd/apps/OptiCraft/data/
+            echo "wii-data files copied: $(find wii-data -type f | wc -l)"
+          else
+            echo "::warning::no wii-data/ folder in repo"
+          fi
+
       - name: Verify SD package
         run: |
           set -eu

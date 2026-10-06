@@ -70,7 +70,10 @@ jobs:
           rm -f /tmp/mc.jar
           if [ -n "${JAR_URL:-}" ]; then
             curl -fSL "$JAR_URL" -o /tmp/mc.jar
+          elif [ -f private-data/1.2.5.jar ]; then
+            cp private-data/1.2.5.jar /tmp/mc.jar
           elif [ -f private-data/1.7.3.jar ]; then
+            echo "::warning::Using private-data/1.7.3.jar (Beta 1.7.3): it lacks enderman, villager, ocelot, golem, panorama and other 1.2.5 textures. Add private-data/1.2.5.jar."
             cp private-data/1.7.3.jar /tmp/mc.jar
           else
             echo "::warning::No jar_url input, MC_JAR_URL secret or private-data/1.2.5.jar. Package will contain boot.dol only."

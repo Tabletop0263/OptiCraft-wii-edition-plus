@@ -133,22 +133,35 @@ ChunkPosition SpawnerAnimals::getRandomSpawningPointInChunk(World *world, int_t 
     return ChunkPosition(k, l, i1);
 }
 
+#ifndef PLATFORM_MAX_LIVE_PASSIVE
+#define PLATFORM_MAX_LIVE_PASSIVE 0x7fffffff
+#endif
+#if PLATFORM_MOB_SPAWN_INTERVAL_TICKS > 1 || PLATFORM_MAX_LIVE_MOBS < 0x7fffffff || PLATFORM_MAX_LIVE_PASSIVE < 0x7fffffff
+#define PLATFORM_SPAWN_CAPS_ACTIVE 1
+#else
+#define PLATFORM_SPAWN_CAPS_ACTIVE 0
+#endif
+
 int_t SpawnerAnimals::performSpawning(World *world, bool spawnHostiles, bool spawnPeaceful)
 {
     if (!spawnHostiles && !spawnPeaceful)
         return 0;
 
-#if PLATFORM_MOB_SPAWN_INTERVAL_TICKS > 1 || PLATFORM_MAX_LIVE_MOBS < 0x7fffffff
-    int_t liveMobs = world->countEntities(EnumCreatureTypeTag::monster_tag)
-                   + world->countEntities(EnumCreatureTypeTag::creature_tag)
-                   + world->countEntities(EnumCreatureTypeTag::waterCreature_tag);
+#if PLATFORM_SPAWN_CAPS_ACTIVE
+    // Separate caps: hostile mobs (PLATFORM_MAX_LIVE_MOBS) and passive/water
+    // mobs (PLATFORM_MAX_LIVE_PASSIVE). Passive animals are placed at chunk
+    // population and fill up around the player, so sharing one cap meant it was
+    // already full and hostiles never got a turn.
+    int_t liveHostile = world->countEntities(EnumCreatureTypeTag::monster_tag);
+    int_t livePassive = world->countEntities(EnumCreatureTypeTag::creature_tag)
+                      + world->countEntities(EnumCreatureTypeTag::waterCreature_tag);
 
     static int_t s_spawnPhase = 0;
     if (++s_spawnPhase < PLATFORM_MOB_SPAWN_INTERVAL_TICKS)
         return 0;
     s_spawnPhase = 0;
 
-    if (liveMobs >= PLATFORM_MAX_LIVE_MOBS)
+    if (liveHostile >= PLATFORM_MAX_LIVE_MOBS && livePassive >= PLATFORM_MAX_LIVE_PASSIVE)
         return 0;
 #endif
 
@@ -251,6 +264,10 @@ int_t SpawnerAnimals::performSpawning(World *world, bool spawnHostiles, bool spa
         const EnumCreatureType &creatureType = *creatureTypePtr;
         if ((!creatureType.getPeacefulCreature() || spawnPeaceful) &&
             (creatureType.getPeacefulCreature() || spawnHostiles) &&
+#if PLATFORM_SPAWN_CAPS_ACTIVE
+            (creatureType.getPeacefulCreature() ? livePassive < PLATFORM_MAX_LIVE_PASSIVE
+                                                : liveHostile < PLATFORM_MAX_LIVE_MOBS) &&
+#endif
             world->countEntities(creatureType.getCreatureTag()) <=
                 creatureType.getMaxNumberOfCreature() * static_cast<int_t>(eligibleChunksForSpawning.size()) / 256)
         {
@@ -338,8 +355,11 @@ int_t SpawnerAnimals::performSpawning(World *world, bool spawnHostiles, bool spa
                             {
                                 ++spawnedInGroup;
                                 creatureSpecificInit(entity, world, spawnX, spawnY, spawnZ);
-#if PLATFORM_MOB_SPAWN_INTERVAL_TICKS > 1 || PLATFORM_MAX_LIVE_MOBS < 0x7fffffff
-                                ++liveMobs;
+#if PLATFORM_SPAWN_CAPS_ACTIVE
+                                if (creatureType.getPeacefulCreature())
+                                    ++livePassive;
+                                else
+                                    ++liveHostile;
 #endif
                                 if (spawnedInGroup >= entity->getMaxSpawnedInChunk())
                                     goto next_chunk;
@@ -355,9 +375,10 @@ int_t SpawnerAnimals::performSpawning(World *world, bool spawnHostiles, bool spa
                         }
 
                         totalSpawned += spawnedInGroup;
-#if PLATFORM_MOB_SPAWN_INTERVAL_TICKS > 1 || PLATFORM_MAX_LIVE_MOBS < 0x7fffffff
-                        if (liveMobs >= PLATFORM_MAX_LIVE_MOBS)
-                            return totalSpawned;
+#if PLATFORM_SPAWN_CAPS_ACTIVE
+                        if (creatureType.getPeacefulCreature() ? livePassive >= PLATFORM_MAX_LIVE_PASSIVE
+                                                               : liveHostile >= PLATFORM_MAX_LIVE_MOBS)
+                            goto next_type;
 #endif
                     }
                 }
@@ -365,6 +386,8 @@ int_t SpawnerAnimals::performSpawning(World *world, bool spawnHostiles, bool spa
             next_chunk:
                 ;
             }
+        next_type:
+            ;
         }
     }
 

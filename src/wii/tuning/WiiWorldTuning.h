@@ -257,8 +257,12 @@
 // 10 mobs, 2 paths per tick of 160 nodes, a spawn pass every 8 ticks: each
 // mob is a pathfinder plus block/entity collision scans per tick, and with
 // the AI throttle below only the ones near the player run every tick anyway.
+// Hostile mobs and passive/water mobs have separate caps. MAX_LIVE_MOBS is the
+// hostile cap; passive animals (placed at chunk population) get their own.
 #undef  PLATFORM_MAX_LIVE_MOBS
 #define PLATFORM_MAX_LIVE_MOBS                   10
+#undef  PLATFORM_MAX_LIVE_PASSIVE
+#define PLATFORM_MAX_LIVE_PASSIVE                12
 #undef  PLATFORM_PATHFIND_BUDGET_PER_TICK
 #define PLATFORM_PATHFIND_BUDGET_PER_TICK        2
 #undef  PLATFORM_PATHFIND_MAX_NODES

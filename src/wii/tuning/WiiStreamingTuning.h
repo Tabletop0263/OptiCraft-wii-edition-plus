@@ -84,6 +84,13 @@
 #define PLATFORM_WII_ASYNC_GENERATION_PUBLISH_PER_TICK   0
 #define PLATFORM_WII_ASYNC_GENERATION_REQUESTS_PER_FRAME  4
 #define PLATFORM_WII_ASYNC_GENERATION_PUBLISH_PER_FRAME   1
+// Frames to wait after publishing a column before publishing the next. A
+// publish is ~7-10 ms on the main thread; at 60 fps (16.7 ms) one per frame
+// meant every frame while streaming overran the retrace. 6 frames = 10 columns
+// a second at 60 fps, still well above the 3-5 a walking player exposes. The
+// world warm-up loop bypasses this. Set to 1 for the old behavior.
+#undef  PLATFORM_ASYNC_GENERATION_PUBLISH_FRAME_INTERVAL
+#define PLATFORM_ASYNC_GENERATION_PUBLISH_FRAME_INTERVAL  6
 
 // A renderer can depend on several neighbouring chunk columns because ChunkCache
 // samples a one-block border. Queue several missing dependencies in one pass

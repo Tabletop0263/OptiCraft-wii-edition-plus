@@ -48,7 +48,8 @@ public:
 
 	ChunkRequestStatus requestChunkDetailed(int_t i, int_t j);
 	bool requestChunk(int_t i, int_t j);
-	void serviceAsyncChunkStreaming();
+	// throttlePublish=false publishes every frame (world warm-up/loading screen).
+	void serviceAsyncChunkStreaming(bool throttlePublish = true);
 #endif
 	bool canChunkExist(int_t i, int_t j) const;
 #if PLATFORM_INCREMENTAL_CHUNK_GENERATION

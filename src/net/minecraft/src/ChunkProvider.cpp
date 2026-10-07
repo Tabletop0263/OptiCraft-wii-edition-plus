@@ -390,14 +390,31 @@ bool ChunkProvider::requestChunk(int_t i, int_t j)
 	return requestChunkDetailed(i, j) == ChunkRequestStatus::Accepted;
 }
 
-void ChunkProvider::serviceAsyncChunkStreaming()
+#ifndef PLATFORM_ASYNC_GENERATION_PUBLISH_FRAME_INTERVAL
+#define PLATFORM_ASYNC_GENERATION_PUBLISH_FRAME_INTERVAL 1
+#endif
+
+void ChunkProvider::serviceAsyncChunkStreaming(bool throttlePublish)
 {
 	if (asyncGenerationScheduler == nullptr || !asyncGenerationScheduler->active())
 		return;
 
 	asyncGenerationScheduler->setFocus(curChunkX, curChunkZ);
 	if (PLATFORM_ASYNC_GENERATION_PUBLISH_PER_FRAME > 0)
-		drainAsyncGeneratedChunks(PLATFORM_ASYNC_GENERATION_PUBLISH_PER_FRAME);
+	{
+		// Publishing a column costs ~7-10 ms on the main thread, which alone
+		// overruns a 16.7 ms frame. After a publish, wait this many frames
+		// before the next one so columns never land in back-to-back frames.
+		// Nothing waiting = no cost, so a result is still published the frame
+		// it arrives once the gap has passed.
+		static int_t s_framesSincePublish = PLATFORM_ASYNC_GENERATION_PUBLISH_FRAME_INTERVAL;
+		++s_framesSincePublish;
+		if (!throttlePublish || s_framesSincePublish >= PLATFORM_ASYNC_GENERATION_PUBLISH_FRAME_INTERVAL)
+		{
+			if (drainAsyncGeneratedChunks(PLATFORM_ASYNC_GENERATION_PUBLISH_PER_FRAME))
+				s_framesSincePublish = 0;
+		}
+	}
 	if (PLATFORM_ASYNC_GENERATION_REQUESTS_PER_FRAME > 0)
 		drainAsyncGenerationRequests(PLATFORM_ASYNC_GENERATION_REQUESTS_PER_FRAME);
 }

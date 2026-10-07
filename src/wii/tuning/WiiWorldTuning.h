@@ -184,7 +184,7 @@
 // 3 ms at WII_TARGET_FPS 30 (was 2 ms of a 16.7 ms frame): the per-frame
 // budgets scale with the frame or the queue drains half as fast.
 #undef  PLATFORM_LIGHTING_BUDGET_US
-#define PLATFORM_LIGHTING_BUDGET_US 3000
+#define PLATFORM_LIGHTING_BUDGET_US 1500
 
 // The desktop table leaves the light queue effectively unbounded (1,000,000
 // jobs, 5-entry merge scan). Async generation publishes several columns per
@@ -428,14 +428,16 @@
 #define PLATFORM_POPULATE_STEPS_AFTER_PUBLISH     8
 
 #undef  PLATFORM_POPULATE_BUDGET_US
-#define PLATFORM_POPULATE_BUDGET_US              2500
+#define PLATFORM_POPULATE_BUDGET_US              1250
 #undef  PLATFORM_POPULATE_SNOW_COLUMNS_PER_STEP
 #define PLATFORM_POPULATE_SNOW_COLUMNS_PER_STEP  32
 
 // Prevent generation, decoration and lighting from spending their independent
 // limits together in the same rendered frame.
+// Halved from 6000 / 3000 / 2500 for 60 fps frames: twice the frames, so the
+// per-second throughput is unchanged but no single frame carries the full slice.
 #undef  PLATFORM_STREAMING_FRAME_BUDGET_US
-#define PLATFORM_STREAMING_FRAME_BUDGET_US       6000
+#define PLATFORM_STREAMING_FRAME_BUDGET_US       3000
 
 // World-generation fidelity profile. Keep Java 1.2.5 decoration counts by
 // default. Set WII_FAST_WORLDGEN=1 to reduce caves, filler veins, liquids,

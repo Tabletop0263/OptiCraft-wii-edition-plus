@@ -2688,7 +2688,7 @@ void Minecraft::changeWorld(World *world, const std::string &s, EntityPlayerSP *
             // updateRenderers() runs. Dispatch/publish them immediately and yield
             // so the lower-priority generation LWP gets CPU before the next retry.
             if (warmupChunkProvider != nullptr && !meshesReady)
-                warmupChunkProvider->serviceAsyncChunkStreaming();
+                warmupChunkProvider->serviceAsyncChunkStreaming(false);
             if (!meshesReady)
                 PlatformCompat::delay(1);
 #endif

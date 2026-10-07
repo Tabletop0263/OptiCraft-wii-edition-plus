@@ -52,6 +52,7 @@
 #include "ISaveHandler.h"
 #include "ChunkProvider.h"
 #include "EntityPlayer.h"
+#include "EntityList.h"
 #include "ChunkProviderLoadOrGenerate.h"
 #include "MathHelper.h"
 #include "IChunkProvider.h"
@@ -3480,7 +3481,7 @@ void World::updateEntities()
                 if (entityNs > 4000000LL)
                 {
                     char phaseName[24];
-                    std::snprintf(phaseName, sizeof(phaseName), "e:%s", entity->getEntityString().c_str());
+                    std::snprintf(phaseName, sizeof(phaseName), "e:%s", EntityList::getEntityString(entity).c_str());
                     platformProfileTickPhase(phaseName, entityNs);
                 }
             }

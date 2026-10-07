@@ -3467,7 +3467,24 @@ void World::updateEntities()
 #if PLATFORM_PS2 && MC_LOG_LEVEL >= 2
             const std::uint32_t entityTickStart = platformProfileRenderPhaseBegin();
 #endif
+#if PLATFORM_WII && PLATFORM_PROFILE_RENDER_PHASES
+            // Name any entity whose update alone takes over 4 ms; it lands in the
+            // tickPhase line as e:<name> (avg/max ms) so a 100+ ms entTick can be
+            // traced to the mob type behind it.
+            const long_t entityStartNs = System::nanoTime();
+#endif
             updateEntity(entity);
+#if PLATFORM_WII && PLATFORM_PROFILE_RENDER_PHASES
+            {
+                const long_t entityNs = System::nanoTime() - entityStartNs;
+                if (entityNs > 4000000LL)
+                {
+                    char phaseName[24];
+                    std::snprintf(phaseName, sizeof(phaseName), "e:%s", entity->getEntityString().c_str());
+                    platformProfileTickPhase(phaseName, entityNs);
+                }
+            }
+#endif
 #if PLATFORM_PS2 && MC_LOG_LEVEL == 2
             platformProfileEntityTickWork(entityTickStart, entity);
 #elif PLATFORM_PS2 && MC_LOG_LEVEL > 2

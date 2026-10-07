@@ -353,6 +353,23 @@
 // faster than the PS2 can generate them. Shorter grace period than the desktop's
 // 200 ticks for the same reason: 3 seconds of standing still is long enough to be
 // sure the player is not about to walk straight back.
+// Save only player-edited chunks when they unload, as the PS2 does.
+//
+// The 2026-10 debug.log from a walking session showed the single biggest cause
+// of dropped frames was unloadSave: every generated chunk that left the cache
+// was serialized and deflated on the main thread, 30 ms each (37-40 ms worst),
+// 5-33 of them per 10 s window. With up to 2 unloads per tick that is 60-135 ms
+// in one tick -- the 100-216 ms tick spikes in the same log, and the reason
+// frames fell apart whenever new terrain streamed in behind you.
+//
+// A chunk nobody edited is regenerated from the seed, so writing it buys
+// nothing. With this on, only chunks with block or tile-entity edits (and not
+// those touched purely by population/lighting) are written on unload. Full
+// saves still write everything modified. Mobs standing in an unedited chunk
+// that unloads are not kept; animals respawn with the regenerated chunk.
+#undef  PLATFORM_SAVE_RUNTIME_CHUNK_EDITS_ON_UNLOAD
+#define PLATFORM_SAVE_RUNTIME_CHUNK_EDITS_ON_UNLOAD 1
+
 #undef  PLATFORM_MAX_CHUNK_UNLOADS_PER_TICK
 #define PLATFORM_MAX_CHUNK_UNLOADS_PER_TICK      2
 #undef  PLATFORM_MIN_UNUSED_TICKS_BEFORE_UNLOAD

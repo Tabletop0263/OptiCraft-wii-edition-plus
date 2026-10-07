@@ -113,10 +113,118 @@ void addSample(long long ns, long long& total, long long& maximum, int& count)
 	++count;
 }
 
+// ---------------------------------------------------------------------------
+// Frame-spike recorder. Any frame slower than kSpikeNs gets one record holding
+// what THAT frame spent on each piece, taken as the difference of the window
+// accumulators between frameBegin() and frameEnd(). Records stay in RAM and are
+// written with the 10 s summary, so the log gets no extra file I/O (and no
+// commit hitch) in the middle of the frames being measured.
+// ---------------------------------------------------------------------------
+constexpr long long kSpikeNs = 24000000LL;
+constexpr int kMaxSpikes = 40;
+
+struct FrameSnap
+{
+	long long tick, light, swap, gpWait, vsync;
+	long long load, gen, pop, mesh, save, tickUpd, mob, saveInfo, map, publish;
+	long long phase[8];
+};
+
+struct SpikeRec
+{
+	long long atMs;
+	int frameMs, tickMs, lightMs, renderMs, swapMs, gpMs, vsyncMs;
+	int loadMs, genMs, popMs, meshMs, saveMs, tickUpdMs, mobMs, saveInfoMs, mapMs, publishMs;
+	int phase10[8]; // render phases, tenths of a ms
+	int ticks, updates, pending;
+};
+
+FrameSnap g_snap = {};
+SpikeRec g_spikes[kMaxSpikes];
+int g_spikeCount = 0;
+int g_spikesDropped = 0;
+int g_spikesTotal = 0;
+
+long long publishSum()
+{
+	for (int i = 0; i < g_wii.tickPhaseCount; i++)
+		if (strncmp(g_wii.tickPhases[i].name, "publish", kTickPhaseNameChars - 1) == 0)
+			return g_wii.tickPhases[i].sumNs;
+	return 0;
+}
+
+void takeSnap()
+{
+	FrameSnap& s = g_snap;
+	s.tick = g_wii.tickNs; s.light = g_wii.lightingNs; s.swap = g_wii.swapNs;
+	s.gpWait = g_wii.gpWaitNs; s.vsync = g_wii.vsyncNs;
+	s.load = g_wii.chunkLoadNs; s.gen = g_wii.generateNs; s.pop = g_wii.populateNs;
+	s.mesh = g_wii.meshNs; s.save = g_wii.unloadSaveNs; s.tickUpd = g_wii.tickUpdatesNs;
+	s.mob = g_wii.mobSpawnNs; s.saveInfo = g_wii.saveInfoNs; s.map = g_wii.mapStorageNs;
+	s.publish = publishSum();
+	for (int i = 0; i < 8; i++) s.phase[i] = g_wii.renderPhaseNs[i];
+}
+
+int ms(long long ns) { return (int)(ns / 1000000LL); }
+
+void recordSpike(long long frameNs, long long renderNs, int ticksThisFrame, int updates, int pending)
+{
+	++g_spikesTotal;
+	if (g_spikeCount >= kMaxSpikes)
+	{
+		++g_spikesDropped;
+		return;
+	}
+	const FrameSnap& s = g_snap;
+	SpikeRec& r = g_spikes[g_spikeCount++];
+	r.atMs = System::currentTimeMillis();
+	r.frameMs = ms(frameNs); r.renderMs = ms(renderNs);
+	r.tickMs = ms(g_wii.tickNs - s.tick); r.lightMs = ms(g_wii.lightingNs - s.light);
+	r.swapMs = ms(g_wii.swapNs - s.swap); r.gpMs = ms(g_wii.gpWaitNs - s.gpWait);
+	r.vsyncMs = ms(g_wii.vsyncNs - s.vsync);
+	r.loadMs = ms(g_wii.chunkLoadNs - s.load); r.genMs = ms(g_wii.generateNs - s.gen);
+	r.popMs = ms(g_wii.populateNs - s.pop); r.meshMs = ms(g_wii.meshNs - s.mesh);
+	r.saveMs = ms(g_wii.unloadSaveNs - s.save); r.tickUpdMs = ms(g_wii.tickUpdatesNs - s.tickUpd);
+	r.mobMs = ms(g_wii.mobSpawnNs - s.mob); r.saveInfoMs = ms(g_wii.saveInfoNs - s.saveInfo);
+	r.mapMs = ms(g_wii.mapStorageNs - s.map); r.publishMs = ms(publishSum() - s.publish);
+	for (int i = 0; i < 8; i++)
+		r.phase10[i] = (int)((g_wii.renderPhaseNs[i] - s.phase[i]) / 100000LL);
+	r.ticks = ticksThisFrame; r.updates = updates; r.pending = pending;
+}
+
+// Appended once per 10 s window, alongside the summary lines, into debug.log on
+// the SD card, so one file read gets everything.
+void flushSpikes()
+{
+	if (g_spikeCount == 0 && g_spikesTotal == 0)
+		return;
+	MC_LOG_INFO("wii.perf", "spikes: %d frames over %ldms this window (%d listed, %d not listed)\n",
+	            g_spikesTotal, (long)(kSpikeNs / 1000000LL), g_spikeCount, g_spikesDropped);
+	for (int i = 0; i < g_spikeCount; i++)
+	{
+		const SpikeRec& r = g_spikes[i];
+		MC_LOG_INFO("wii.perf",
+		            "spike t=%ld frame=%d tick=%d(ticks=%d) light=%d render=%d swap=%d(gp=%d vsync=%d) | "
+		            "publish=%d load=%d gen=%d populate=%d mesh=%d unloadSave=%d tickUpd=%d mob=%d saveInfo=%d mapStore=%d | "
+		            "phase sky=%d.%d frus=%d.%d build=%d.%d opaque=%d.%d ents=%d.%d transl=%d.%d hand=%d.%d hud=%d.%d | updates=%d pending=%d\n",
+		            (long)(r.atMs / 1000), r.frameMs, r.tickMs, r.ticks, r.lightMs, r.renderMs, r.swapMs, r.gpMs, r.vsyncMs,
+		            r.publishMs, r.loadMs, r.genMs, r.popMs, r.meshMs, r.saveMs, r.tickUpdMs, r.mobMs, r.saveInfoMs, r.mapMs,
+		            r.phase10[0] / 10, r.phase10[0] % 10, r.phase10[1] / 10, r.phase10[1] % 10,
+		            r.phase10[2] / 10, r.phase10[2] % 10, r.phase10[3] / 10, r.phase10[3] % 10,
+		            r.phase10[4] / 10, r.phase10[4] % 10, r.phase10[5] / 10, r.phase10[5] % 10,
+		            r.phase10[6] / 10, r.phase10[6] % 10, r.phase10[7] / 10, r.phase10[7] % 10,
+		            r.updates, r.pending);
+	}
+	g_spikeCount = 0;
+	g_spikesDropped = 0;
+	g_spikesTotal = 0;
+}
+
 void resetWindow(long long nowMs)
 {
 	g_wii = WiiWindow{};
 	g_wii.startedMs = nowMs;
+	takeSnap();
 }
 }
 
@@ -170,6 +278,7 @@ void frameBegin()
 {
 	if (g_wii.startedMs == 0)
 		resetWindow(System::currentTimeMillis());
+	takeSnap();
 }
 
 void ticks(long long ns, int ticksThisFrame)
@@ -225,7 +334,7 @@ void displayUpdate(long long ns)
 void render(long long) {}
 
 void frameEnd(long long frameNs, long long, long long renderNs,
-              int, int chunkUpdates, World* world, RenderGlobal* renderGlobal)
+              int ticksThisFrame, int chunkUpdates, World* world, RenderGlobal* renderGlobal)
 {
 	g_wii.frameNs += frameNs;
 	g_wii.renderNs += renderNs;
@@ -233,6 +342,10 @@ void frameEnd(long long frameNs, long long, long long renderNs,
 	g_wii.maxRenderNs = std::max(g_wii.maxRenderNs, renderNs);
 	++g_wii.frames;
 	g_wii.chunkUpdates += chunkUpdates;
+
+	if (frameNs > kSpikeNs)
+		recordSpike(frameNs, renderNs, ticksThisFrame, chunkUpdates,
+		            renderGlobal != nullptr ? (int)renderGlobal->pendingRendererUpdateCount() : 0);
 
 	g_wii.prevRenderNs = renderNs;
 	g_wii.curTickNs = 0;
@@ -330,6 +443,7 @@ void frameEnd(long long frameNs, long long, long long renderNs,
 		            renderGlobal != nullptr ? (int)renderGlobal->pendingRendererUpdateCount() : 0,
 		            chunks.c_str());
 	}
+	flushSpikes();
 	resetWindow(now);
 	g_wii.prevRenderNs = renderNs;
 }

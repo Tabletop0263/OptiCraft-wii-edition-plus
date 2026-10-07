@@ -54,6 +54,7 @@ jobs:
           -DWII_BRINGUP=OFF
           -DWII_ENABLE_SOUND=ON
           -DWII_ENABLE_NETWORK=ON
+          -DMC_LOG_LEVEL=1
           -DCMAKE_CXX_FLAGS="-DHW_RVL -mrvl -mcpu=750 -meabi -mhard-float -I$GITHUB_WORKSPACE/src/net/minecraft/src"
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache

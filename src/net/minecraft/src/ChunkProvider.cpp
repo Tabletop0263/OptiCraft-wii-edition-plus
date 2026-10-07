@@ -411,8 +411,12 @@ void ChunkProvider::serviceAsyncChunkStreaming(bool throttlePublish)
 		++s_framesSincePublish;
 		if (!throttlePublish || s_framesSincePublish >= PLATFORM_ASYNC_GENERATION_PUBLISH_FRAME_INTERVAL)
 		{
+			const long_t publishStartNs = System::nanoTime();
 			if (drainAsyncGeneratedChunks(PLATFORM_ASYNC_GENERATION_PUBLISH_PER_FRAME))
+			{
 				s_framesSincePublish = 0;
+				platformProfileTickPhase("publish", System::nanoTime() - publishStartNs);
+			}
 		}
 	}
 	if (PLATFORM_ASYNC_GENERATION_REQUESTS_PER_FRAME > 0)
